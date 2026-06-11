@@ -1,0 +1,175 @@
+# =============================================================================
+# Microphone Node Registry — Berkeley House Audio Monitoring
+# =============================================================================
+# Active nodes: front-porch, shed
+# Future nodes: garden-east, roof-north, backyard-west, study (placeholder)
+#
+# Fields:
+#   id          — machine ID used in API routes and file paths
+#   label       — human display name
+#   rtsp_url    — RTSP stream on local LAN
+#   lat / lng   — geographic coords (for analyzer location hints)
+#   location    — plain text description
+#   analyzers   — ordered list of analyzers to run per chunk
+#   sample_rate — Hz; 48000 for birds, 192000 for bats (ultrasonic)
+#   chunk_secs  — seconds per analysis window (15 recommended for BirdNET)
+#   enabled     — false = skip without removing
+# =============================================================================
+
+ingest_url: "http://localhost:5050/api/ingest"
+
+nodes:
+
+  # ── ACTIVE ────────────────────────────────────────────────────────────────
+
+  - id: front-porch
+    label: "Front Porch"
+    rtsp_url: "rtsp://192.168.1.101:8554/mic"
+    lat: 37.8751
+    lng: -122.2697
+    location: "Front porch facing the street"
+    analyzers:
+      - birdnet
+      - batnet
+    sample_rate: 48000
+    chunk_secs: 15
+    enabled: true
+
+  - id: shed
+    label: "Shed"
+    rtsp_url: "rtsp://192.168.1.102:8554/mic"
+    lat: 37.8748
+    lng: -122.2699
+    location: "Rear shed — open to backyard"
+    analyzers:
+      - birdnet
+      - batnet
+    sample_rate: 48000
+    chunk_secs: 15
+    enabled: true
+
+  # ── FUTURE INSTALLS (disabled until hardware deployed) ────────────────────
+
+  - id: garden-east
+    label: "East Garden"
+    rtsp_url: "rtsp://192.168.1.103:8554/mic"
+    lat: 37.8749
+    lng: -122.2694
+    location: "East garden near the oak tree"
+    analyzers:
+      - birdnet
+      - batnet
+    sample_rate: 48000
+    chunk_secs: 15
+    enabled: false
+
+  - id: roof-north
+    label: "Roof North"
+    rtsp_url: "rtsp://192.168.1.104:8554/mic"
+    lat: 37.8753
+    lng: -122.2695
+    location: "Rooftop, north-facing — wide open sky"
+    analyzers:
+      - birdnet
+      - batnet
+    sample_rate: 48000
+    chunk_secs: 15
+    enabled: false
+
+  - id: backyard-west
+    label: "Backyard West"
+    rtsp_url: "rtsp://192.168.1.105:8554/mic"
+    lat: 37.8748
+    lng: -122.2700
+    location: "West backyard near the fence line"
+    analyzers:
+      - birdnet
+      - batnet
+    sample_rate: 48000
+    chunk_secs: 15
+    enabled: false
+
+  - id: study
+    label: "Study"
+    rtsp_url: "rtsp://192.168.1.106:8554/mic"
+    lat: 37.8750
+    lng: -122.2696
+    location: "Interior study — ambient / near open window"
+    analyzers:
+      - birdnet
+    sample_rate: 48000
+    chunk_secs: 15
+    enabled: false
+
+# =============================================================================
+# Analyzer settings
+# =============================================================================
+
+birdnet:
+  analyzer_path: "/opt/BirdNET-Analyzer"
+  min_confidence: 0.70
+
+batnet:
+  analyzer_path: "/opt/BatNET-Detector"
+  min_confidence: 0.65
+  # BatNET only activates when node sample_rate >= this value.
+  # Standard mics at 48kHz will be silently skipped for bat analysis.
+  required_sample_rate: 192000
+
+# Future analyzers: add a new key here and drop a corresponding *_runner.py
+# in src/analyzers/. The dispatcher picks them up automatically.
+# Example:
+#   soundscape:
+#     enabled: false
+#     analyzer_path: "/opt/SoundscapeEcology"
+
+# =============================================================================
+# Audio archiving — "interesting" clip storage
+# =============================================================================
+#
+# Clips that match ANY of the rules below are saved to disk.
+# The definition of "interesting" is intentionally simple and changeable here.
+#
+archive:
+  enabled: true
+  base_dir: "./data/audio"     # relative to audio-receiver root
+  format: "wav"                # wav | flac
+  retention_days: 90           # 0 = keep forever
+
+  # Rules — a clip is archived if it satisfies ANY rule (OR logic).
+  # Set a rule's 'enabled' to false to disable it without deleting it.
+  rules:
+
+    - name: "high_confidence_detection"
+      enabled: true
+      description: "Any detection from any analyzer above 85% confidence"
+      min_confidence: 0.85
+      analyzers: []            # empty = all analyzers
+
+    - name: "bat_any"
+      enabled: true
+      description: "Any bat detection regardless of confidence"
+      min_confidence: 0.0
+      analyzers: [batnet]
+
+    - name: "species_watchlist"
+      enabled: true
+      description: "Hard-coded species of interest — expand as needed"
+      min_confidence: 0.0
+      analyzers: []
+      species_contains:        # substring match on scientific OR common name
+        - "Owl"
+        - "Hawk"
+        - "Falcon"
+        - "Strix"
+        - "Buteo"
+        - "Accipiter"
+
+    # Placeholder — uncomment and configure when ready
+    # - name: "time_window"
+    #   enabled: false
+    #   description: "Capture all audio during dawn chorus (0530–0730 local)"
+    #   time_start: "05:30"
+    #   time_end: "07:30"
+    #   min_confidence: 0.0
+    #   analyzers: []
