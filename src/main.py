@@ -22,7 +22,7 @@ import yaml  # PyYAML
 
 from logger import get_logger
 from rtsp_node import RtspNode
-from audio_pipeline import AudioPipeline
+from audio_pipeline import AudioPipeline, _birdnet_summary
 import mqtt_bridge
 
 log = get_logger("main")
@@ -96,6 +96,9 @@ def main() -> None:
     # ── MQTT lifecycle: publish online status ─────────────────────────────
     mqtt_bridge.start([n.node_id for n in node_threads])
 
+    # ── BirdNET message summary: start hourly publisher ─────────────────
+    _birdnet_summary.start()
+
     # ── Graceful shutdown handler ─────────────────────────────────────────
     shutdown_event = threading.Event()
 
@@ -104,6 +107,7 @@ def main() -> None:
         for n in node_threads:
             n.stop()
         pipeline.shutdown()
+        _birdnet_summary.stop()   # flush final partial window to Messages inbox
         mqtt_bridge.stop()
         shutdown_event.set()
 

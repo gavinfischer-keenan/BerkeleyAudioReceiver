@@ -27,9 +27,15 @@ from audio_archiver import AudioArchiver
 from audio_store import store as local_store
 from poster import post_detection
 import mqtt_bridge
+import message_publisher
 from logger import get_logger
 
 log = get_logger("pipeline")
+
+# BirdNET message summary — accumulates detections and publishes hourly to
+# home/messages/birdnet/summary for the BerkeleyMessages AI inbox.
+# Started/stopped alongside the pipeline by main.py.
+_birdnet_summary = message_publisher.BirdNetMessageSummary()
 
 # Conservative thread count — keeps a Pi responsive for other tasks.
 # Increase on beefy home servers.
@@ -116,6 +122,12 @@ class AudioPipeline:
                 detections=det_dicts,
                 node_meta=node_meta,
             )
+
+            # 5. Accumulate in BirdNET message summary (birdnet detections only)
+            #    Hourly summary → home/messages/birdnet/summary → BerkeleyMessages inbox
+            #    High-confidence detections → home/messages/birdnet/notable (immediate)
+            if analyzer.name == "birdnet" and detections:
+                _birdnet_summary.record(detections, node_id)
 
             log.info("Chunk processed", extra={
                 "node":     node_id,
